@@ -4,11 +4,11 @@
 
 <div align="center">
 
-[![PyPI](https://img.shields.io/pypi/v/faster-coco-eval)](https://pypi.org/project/faster-coco-eval)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/faster-coco-eval.svg?label=PyPI%20downloads)](https://pypi.org/project/faster-coco-eval/)
+[![PyPI](https://img.shields.io/pypi/v/faster-coco-eval-aitod)](https://pypi.org/project/faster-coco-eval-aitod)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/faster-coco-eval-aitod.svg?label=PyPI%20downloads)](https://pypi.org/project/faster-coco-eval-aitod/)
 
-[![Conda Version](https://img.shields.io/conda/vn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval)
-[![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval)
+<!-- [![Conda Version](https://img.shields.io/conda/vn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval)
+[![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval) -->
 
 [![license](https://img.shields.io/github/license/RicePasteM/faster_coco_eval_aitod.svg)](https://github.com/MiXaiLL76/faster_coco_eval_aitod/blob/main/LICENSE)
 
