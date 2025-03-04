@@ -3,6 +3,7 @@
 #include <time.h>
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <numeric>
 using namespace pybind11::literals;
 
@@ -90,9 +91,9 @@ namespace coco_eval
         ImageEvaluation *results)
     {
       // Initialize memory to store return data matches and ignore
-      const int num_iou_thresholds = (const int) iou_thresholds.size();
-      const int num_ground_truth = (const int) ground_truth_sorted_indices.size();
-      const int num_detections = (const int) detection_sorted_indices.size();
+      const int num_iou_thresholds = (const int)iou_thresholds.size();
+      const int num_ground_truth = (const int)ground_truth_sorted_indices.size();
+      const int num_detections = (const int)detection_sorted_indices.size();
       // std::vector<uint64_t> ground_truth_matches(
       // num_iou_thresholds * num_ground_truth, 0);
       std::vector<int64_t> &ground_truth_matches = results->ground_truth_matches;
@@ -102,6 +103,9 @@ namespace coco_eval
 
       std::vector<bool> &detection_ignores = results->detection_ignores;
       std::vector<bool> &ground_truth_ignores = results->ground_truth_ignores;
+      results->detection_iou.resize(
+          num_iou_thresholds,
+          std::vector<double>(detection_sorted_indices.size(), 0.0));
       detection_matches.resize(num_iou_thresholds * num_detections, 0);
       detection_ignores.resize(num_iou_thresholds * num_detections, false);
       ground_truth_ignores.resize(num_ground_truth);
@@ -147,6 +151,9 @@ namespace coco_eval
           // ground truth
           if (match >= 0)
           {
+            // Record the actual matched IoU value (key modification point)
+            results->detection_iou[t][d] = ious[d][ground_truth_sorted_indices[match]];
+
             detection_ignores[t * num_detections + d] = ground_truth_ignores[match];
             detection_matches[t * num_detections + d] =
                 ground_truth_instances[ground_truth_sorted_indices[match]].id;
@@ -155,9 +162,14 @@ namespace coco_eval
 
             results->matched_annotations.push_back(
                 MatchedAnnotation(
-                    ground_truth_matches[t * num_ground_truth + match], // DT_ID
-                    detection_matches[t * num_detections + d],          // GT_ID
-                    best_iou));
+                    ground_truth_matches[t * num_ground_truth + match],
+                    detection_matches[t * num_detections + d],
+                    results->detection_iou[t][d])); // Use actual matched IoU value
+          }
+          else
+          {
+            // Keep IoU as 0 for unmatched detection boxes (key modification point) 
+            results->detection_iou[t][d] = 0.0;
           }
 
           // set unmatched detections outside of area range to ignore
@@ -189,9 +201,9 @@ namespace coco_eval
         const ImageCategoryInstances<InstanceAnnotation> &
             image_category_detection_instances)
     {
-      const int num_area_ranges = (const int) area_ranges.size();
-      const int num_images = (const int) image_category_ground_truth_instances.size();
-      const int num_categories = (const int) (image_category_ious.size() > 0 ? image_category_ious[0].size() : 0);
+      const int num_area_ranges = (const int)area_ranges.size();
+      const int num_images = (const int)image_category_ground_truth_instances.size();
+      const int num_categories = (const int)(image_category_ious.size() > 0 ? image_category_ious[0].size() : 0);
       std::vector<uint64_t> detection_sorted_indices;
       std::vector<uint64_t> ground_truth_sorted_indices;
       std::vector<bool> ignores;
@@ -271,13 +283,16 @@ namespace coco_eval
         const int64_t evaluation_index,
         const int64_t num_images,
         const int max_detections,
+        const int iou_threshold_index,
         std::vector<uint64_t> *evaluation_indices,
         std::vector<double> *detection_scores,
         std::vector<uint64_t> *detection_sorted_indices,
-        std::vector<uint64_t> *image_detection_indices)
+        std::vector<uint64_t> *image_detection_indices,
+        std::vector<double> *detection_ious)
     {
       assert(evaluations.size() >= evaluation_index + num_images);
-
+      detection_ious->clear();
+      detection_ious->reserve(num_images * max_detections); // Pre-allocate memory
       // Extract a list of object instances of the applicable category, area
       // range, and max detections requirements such that they can be sorted
       image_detection_indices->clear();
@@ -291,13 +306,12 @@ namespace coco_eval
       {
         const ImageEvaluation &evaluation = evaluations[evaluation_index + i];
 
-        for (int d = 0;
-             d < (int)evaluation.detection_scores.size() && d < max_detections;
-             ++d)
+        for (int d = 0; d < (int)evaluation.detection_scores.size() && d < max_detections; ++d)
         { // detected instances
           evaluation_indices->emplace_back(evaluation_index + i);
           image_detection_indices->emplace_back(d);
           detection_scores->emplace_back(evaluation.detection_scores[d]);
+          detection_ious->push_back(evaluation.detection_iou[iou_threshold_index][d]);
         }
         for (auto ground_truth_ignore : evaluation.ground_truth_ignores)
         {
@@ -311,8 +325,7 @@ namespace coco_eval
       // Sort detections by decreasing score, using stable sort to match
       // python implementation
       detection_sorted_indices->resize(detection_scores->size());
-      std::iota(
-          detection_sorted_indices->begin(), detection_sorted_indices->end(), 0);
+      std::iota(detection_sorted_indices->begin(), detection_sorted_indices->end(), 0);
       std::stable_sort(
           detection_sorted_indices->begin(),
           detection_sorted_indices->end(),
@@ -320,6 +333,22 @@ namespace coco_eval
           {
             return (*detection_scores)[j1] > (*detection_scores)[j2];
           });
+
+      assert(detection_scores->size() == detection_ious->size() &&
+             "detection_scores and detection_ious must have same size!");
+
+      // Create sorted IoU vector
+      std::vector<double> sorted_ious;
+      sorted_ious.reserve(detection_ious->size()); // Pre-allocate memory to improve performance
+
+      // Fill IoU values based on sorted indices
+      for (const auto &sorted_index : *detection_sorted_indices)
+      {
+        sorted_ious.push_back((*detection_ious)[sorted_index]);
+      }
+
+      // Move semantics optimization: avoid copying large data
+      *detection_ious = std::move(sorted_ious);
 
       return num_valid_ground_truth;
     }
@@ -346,11 +375,21 @@ namespace coco_eval
         const std::vector<double> &detection_scores,
         const std::vector<uint64_t> &detection_sorted_indices,
         const std::vector<uint64_t> &image_detection_indices,
+        const std::vector<double> &detection_ious, // Added: sorted IoU values
+        const double iou_threshold,                // Added:  IoU threshold
+        const bool with_lrp,                       // Added: Calculate LRP or not
         std::vector<double> *precisions,
         std::vector<double> *recalls,
         std::vector<double> *precisions_out,
         std::vector<double> *scores_out,
-        std::vector<double> *recalls_out)
+        std::vector<double> *recalls_out,
+        const int64_t olrp_index, // Added: where LRP result saves
+        // Added: LRP_outs
+        std::vector<double> *olrp_loc,
+        std::vector<double> *olrp_fp,
+        std::vector<double> *olrp_fn,
+        std::vector<double> *olrp,
+        std::vector<double> *lrp_opt_thr)
     {
       assert(recalls_out->size() > recalls_out_index);
 
@@ -430,21 +469,99 @@ namespace coco_eval
           (*scores_out)[results_ind] = 0;
         }
       }
+
+      // LRP Calculation
+      if (with_lrp && iou_threshold_index == 0)
+      { // Only first LRP threshold
+        std::vector<int64_t> tp_cumulative;
+        std::vector<int64_t> fp_cumulative;
+        std::vector<double> iou_cumulative;
+        std::vector<double> lrps;
+
+        int64_t current_tp = 0;
+        int64_t current_fp = 0;
+        double current_iou_sum = 0.0;
+
+        // Iterate through sorted detection list
+        for (size_t i = 0; i < detection_sorted_indices.size(); ++i)
+        {
+          const uint64_t sorted_idx = detection_sorted_indices[i];
+          const ImageEvaluation &eval = evaluations[evaluation_indices[sorted_idx]];
+
+          const auto num_detections = eval.detection_matches.size() / num_iou_thresholds;
+          const auto detection_idx = iou_threshold_index * num_detections +
+                                     image_detection_indices[sorted_idx];
+
+          const bool is_tp = (eval.detection_matches[detection_idx] > 0) &&
+                             !eval.detection_ignores[detection_idx];
+          const bool is_fp = (eval.detection_matches[detection_idx] == 0) &&
+                             !eval.detection_ignores[detection_idx];
+
+          if (is_tp)
+          {
+            current_tp++;
+            current_iou_sum += detection_ious[i];
+          }
+          else if (is_fp)
+          {
+            current_fp++;
+          }
+
+          tp_cumulative.push_back(current_tp);
+          fp_cumulative.push_back(current_fp);
+          iou_cumulative.push_back(current_iou_sum);
+        }
+
+        // const int64_t total_fn = num_valid_ground_truth - current_tp;
+
+        // Calculate the LRP value for each detection point
+        for (size_t i = 0; i < tp_cumulative.size(); ++i)
+        {
+          const int64_t current_fn = num_valid_ground_truth - tp_cumulative[i];
+          const double total_loc = tp_cumulative[i] - iou_cumulative[i];
+          const double numerator = (total_loc / (1 - iou_threshold)) +
+                                   fp_cumulative[i] + current_fn;
+          const double denominator = tp_cumulative[i] + fp_cumulative[i] + current_fn;
+
+          lrps.push_back(denominator > 0 ? numerator / denominator : 1.0);
+        }
+
+        // Find the minimum LRP
+        if (!lrps.empty())
+        {
+          auto min_lrp_iter = std::min_element(lrps.begin(), lrps.end());
+          size_t opt_index = std::distance(lrps.begin(), min_lrp_iter);
+
+          (*olrp)[olrp_index] = *min_lrp_iter;
+          (*olrp_loc)[olrp_index] = (tp_cumulative[opt_index] > 0) ? (tp_cumulative[opt_index] - iou_cumulative[opt_index]) / tp_cumulative[opt_index] : 0;
+          (*olrp_fp)[olrp_index] = (tp_cumulative[opt_index] + fp_cumulative[opt_index] > 0) ? fp_cumulative[opt_index] / static_cast<double>(tp_cumulative[opt_index] + fp_cumulative[opt_index]) : 0;
+          int64_t current_fn_at_opt = num_valid_ground_truth - tp_cumulative[opt_index];
+          (*olrp_fn)[olrp_index] = static_cast<double>(current_fn_at_opt) / num_valid_ground_truth;
+          (*lrp_opt_thr)[olrp_index] = detection_scores[detection_sorted_indices[opt_index]];
+        }
+        else
+        {
+          (*olrp)[olrp_index] = 1.0;
+          (*olrp_fn)[olrp_index] = 1.0;
+        }
+      }
     }
     py::dict Accumulate(
         const py::object &params,
-        const std::vector<ImageEvaluation> &evaluations)
+        const std::vector<ImageEvaluation> &evaluations,
+        const bool with_lrp = true)
     {
       const std::vector<double> recall_thresholds =
           list_to_vec<double>(params.attr("recThrs"));
       const std::vector<int> max_detections =
           list_to_vec<int>(params.attr("maxDets"));
-      const int num_iou_thresholds = (const int) py::len(params.attr("iouThrs"));
-      const int num_recall_thresholds = (const int) py::len(params.attr("recThrs"));
-      const int num_categories = (const int)(params.attr("useCats").cast<int>() == 1 ? py::len(params.attr("catIds")) : 1);
-      const int num_area_ranges = (const int) py::len(params.attr("areaRng"));
-      const int num_max_detections = (const int) py::len(params.attr("maxDets"));
-      const int num_images = (const int) py::len(params.attr("imgIds"));
+      const std::vector<double> iouThrs = list_to_vec<double>(params.attr("iouThrs"));
+      const int num_iou_thresholds = (const int)py::len(params.attr("iouThrs"));
+      const int num_recall_thresholds = (const int)py::len(params.attr("recThrs"));
+      const int num_categories = (const int)(params.attr("useCats").cast<int>() == 1 ? py::len(params.attr("catIds")) : 1); // K
+      const int num_area_ranges = (const int)py::len(params.attr("areaRng"));                                               // A
+      const int num_max_detections = (const int)py::len(params.attr("maxDets"));                                            // M
+      const int num_images = (const int)py::len(params.attr("imgIds"));
 
       std::vector<double> precisions_out(
           num_iou_thresholds * num_recall_thresholds * num_categories *
@@ -458,6 +575,25 @@ namespace coco_eval
           num_iou_thresholds * num_recall_thresholds * num_categories *
               num_area_ranges * num_max_detections,
           -1);
+      std::vector<double> detection_ious;
+
+      // LRP
+      const int64_t lrp_buffer_size = num_categories * num_area_ranges * num_max_detections;
+
+      // Localization Error of oLRP
+      std::vector<double> olrp_loc_out(lrp_buffer_size, -1);
+
+      // False Positive part of oLRP
+      std::vector<double> olrp_fp_out(lrp_buffer_size, -1);
+
+      // False Negative part of oLRP
+      std::vector<double> olrp_fn_out(lrp_buffer_size, -1);
+
+      // Final oLRP value
+      std::vector<double> olrp_out(lrp_buffer_size, -1);
+
+      // Optimal threshold score (detection score corresponding to minimum oLRP)
+      std::vector<double> lrp_opt_thr_out(lrp_buffer_size, -1);
 
       // Consider the list of all detected instances in the entire dataset in one
       // large list.  evaluation_indices, detection_scores,
@@ -485,23 +621,24 @@ namespace coco_eval
             // the outermost loop and images in the innermost loop.
             const int64_t evaluations_index =
                 c * num_area_ranges * num_images + a * num_images;
-            int num_valid_ground_truth = BuildSortedDetectionList(
-                evaluations,
-                evaluations_index,
-                num_images,
-                max_detections[m],
-                &evaluation_indices,
-                &detection_scores,
-                &detection_sorted_indices,
-                &image_detection_indices);
-
-            if (num_valid_ground_truth == 0)
-            {
-              continue;
-            }
-
             for (auto t = 0; t < num_iou_thresholds; ++t)
             {
+              int num_valid_ground_truth = BuildSortedDetectionList(
+                  evaluations,
+                  evaluations_index,
+                  num_images,
+                  max_detections[m],
+                  t,
+                  &evaluation_indices,
+                  &detection_scores,
+                  &detection_sorted_indices,
+                  &image_detection_indices,
+                  &detection_ious);
+
+              if (num_valid_ground_truth == 0)
+              {
+                continue;
+              }
               // recalls_out is a flattened vectors representing a
               // num_iou_thresholds X num_categories X num_area_ranges X
               // num_max_detections matrix
@@ -520,12 +657,17 @@ namespace coco_eval
                                                    c * num_area_ranges * num_max_detections +
                                                    a * num_max_detections + m;
 
+              const int64_t olrp_index =
+                  c * num_area_ranges * num_max_detections +
+                  a * num_max_detections +
+                  m;
+
               ComputePrecisionRecallCurve(
                   precisions_out_index,
                   precisions_out_stride,
                   recalls_out_index,
                   recall_thresholds,
-                  t,
+                  t, // iou_threshold_index
                   num_iou_thresholds,
                   num_valid_ground_truth,
                   evaluations,
@@ -533,11 +675,20 @@ namespace coco_eval
                   detection_scores,
                   detection_sorted_indices,
                   image_detection_indices,
+                  detection_ious,
+                  iouThrs[t],
+                  with_lrp,
                   &precisions,
                   &recalls,
                   &precisions_out,
                   &scores_out,
-                  &recalls_out);
+                  &recalls_out,
+                  olrp_index,
+                  &olrp_loc_out,
+                  &olrp_fp_out,
+                  &olrp_fn_out,
+                  &olrp_out,
+                  &lrp_opt_thr_out);
             }
           }
         }
@@ -592,7 +743,6 @@ namespace coco_eval
           num_area_ranges,
           num_max_detections};
       std::vector<int64_t> matches_shape = {num_iou_thresholds * num_area_ranges, -1};
-
       return py::dict(
           "params"_a = params,
           "counts"_a = counts,
@@ -606,7 +756,13 @@ namespace coco_eval
 
           // recall is num_iou_thresholds X num_categories X num_area_ranges X num_max_detections
           "recall"_a = py::array(recalls_out.size(), recalls_out.data()).reshape(recall_counts),
-          "evaluations_size"_a = evaluations_size);
+          "evaluations_size"_a = evaluations_size,
+          "olrp_loc"_a = olrp_loc_out,      // Added
+          "olrp_fp"_a = olrp_fp_out,        // Added
+          "olrp_fn"_a = olrp_fn_out,        // Added
+          "olrp"_a = olrp_out,              // Added
+          "lrp_opt_thr"_a = lrp_opt_thr_out // Added
+      );
     }
 
     py::dict EvaluateAccumulate(
@@ -630,29 +786,34 @@ namespace coco_eval
       this->data[{img_id, cat_id}].emplace_back(ann);
     }
 
-    void Dataset::clean(){
+    void Dataset::clean()
+    {
       this->data.clear();
     }
 
-    py::tuple Dataset::make_tuple() const {
+    py::tuple Dataset::make_tuple() const
+    {
       std::vector<std::pair<int64_t, int64_t>> keys;
       std::vector<std::vector<py::dict>> values;
 
-      for (const auto& [key, value] : this->data) {
-          keys.push_back(key);
-          values.push_back(value);
+      for (const auto &[key, value] : this->data)
+      {
+        keys.push_back(key);
+        values.push_back(value);
       }
       return py::make_tuple(keys, values);
     }
 
-    void Dataset::load_tuple(py::tuple data){
+    void Dataset::load_tuple(py::tuple data)
+    {
       if (data.size() != 2)
         throw std::runtime_error("Invalid state!");
 
       std::vector<std::pair<int64_t, int64_t>> keys = data[0].cast<std::vector<std::pair<int64_t, int64_t>>>();
       std::vector<std::vector<py::dict>> values = data[1].cast<std::vector<std::vector<py::dict>>>();
 
-      for (size_t i = 0; i < keys.size(); i++) {
+      for (size_t i = 0; i < keys.size(); i++)
+      {
         this->data[keys[i]] = values[i];
       }
     }

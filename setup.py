@@ -16,7 +16,7 @@ def readme():
     return content
 
 
-version_file = "faster_coco_eval/version.py"
+version_file = "faster_coco_eval_aitod/version.py"
 
 
 def get_version():
@@ -122,7 +122,7 @@ def get_extensions(version_info):
         kwargs["extra_compile_args"].append("-std=c++" + str(kwargs.pop("cxx_std")))
         kwargs["extra_compile_args"].append("-mmacosx-version-min=10.13")
 
-    ext_modules += [Pybind11Extension(name="faster_coco_eval.faster_eval_api_cpp", sources=sources, **kwargs)]
+    ext_modules += [Pybind11Extension(name="faster_coco_eval_aitod.faster_eval_api_cpp", sources=sources, **kwargs)]
 
     sources = [
         "csrc/mask_api/src/mask.cpp",
@@ -131,7 +131,7 @@ def get_extensions(version_info):
     ]
     print(f"Sources: {sources}")
 
-    ext_modules += [Pybind11Extension(name="faster_coco_eval.mask_api_new_cpp", sources=sources, **kwargs)]
+    ext_modules += [Pybind11Extension(name="faster_coco_eval_aitod.mask_api_new_cpp", sources=sources, **kwargs)]
 
     return ext_modules
 
@@ -139,14 +139,14 @@ def get_extensions(version_info):
 __version__, __author__ = get_version()
 
 setup(
-    name="faster-coco-eval",
+    name="faster-coco-eval-aitod",
     version=__version__,
-    description="Faster interpretation of the original COCOEval",
+    description="a fork of Faster-COCO-Eval modified specifically for the AI-TOD dataset",
     long_description=readme(),
     long_description_content_type="text/markdown",
-    url="https://github.com/MiXaiLL76/faster_coco_eval",
+    url="https://github.com/RicePasteM/faster_coco_eval_aitod",
     author=__author__,
-    author_email="mike.milos@yandex.ru",
+    author_email="huzhangchi@mail.ustc.edu.cn",
     packages=setuptools.find_packages(),
     ext_modules=get_extensions(__version__),
     cmdclass={"build_ext": build_ext},

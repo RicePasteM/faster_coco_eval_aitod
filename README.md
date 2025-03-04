@@ -1,4 +1,8 @@
-# Faster-COCO-Eval
+<div align="center">
+    <h1>Faster-COCO-Eval-AITOD</h1>
+</div>
+
+<div align="center">
 
 [![PyPI](https://img.shields.io/pypi/v/faster-coco-eval)](https://pypi.org/project/faster-coco-eval)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/faster-coco-eval.svg?label=PyPI%20downloads)](https://pypi.org/project/faster-coco-eval/)
@@ -6,119 +10,99 @@
 [![Conda Version](https://img.shields.io/conda/vn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval)
 [![Conda Platforms](https://img.shields.io/conda/pn/conda-forge/faster-coco-eval.svg)](https://anaconda.org/conda-forge/faster-coco-eval)
 
-[![docs](https://img.shields.io/badge/docs-latest-blue)](https://github.com/MiXaiLL76/faster_coco_eval/wiki)
-[![license](https://img.shields.io/github/license/MiXaiLL76/faster_coco_eval.svg)](https://github.com/MiXaiLL76/faster_coco_eval/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/RicePasteM/faster_coco_eval_aitod.svg)](https://github.com/MiXaiLL76/faster_coco_eval_aitod/blob/main/LICENSE)
 
-[![CI - Test](https://github.com/MiXaiLL76/faster_coco_eval/actions/workflows/unittest.yml/badge.svg)](https://github.com/MiXaiLL76/faster_coco_eval/actions/workflows/unittest.yml)
+</div>
 
-<!-- [![Coverage](https://codecov.io/github/MiXaiLL76/faster_coco_eval/coverage.svg?branch=main)](https://codecov.io/gh/MiXaiLL76/faster_coco_eval)       -->
 
 ## Disclaimer
 
-I often use this project, but I saw it abandoned and without a public repository on github.
-Also, part of the project remained unfinished for a long time. I implemented some of the author's ideas and decided to make the results publicly available.
+This project is a fork of [Faster-COCO-Eval](https://github.com/MiXaiLL76/faster_coco_eval) modified specifically for the AITOD (ATiny Object Detection in Aerial Images) dataset.
+
+The main modifications include adapting evaluation parameters for tiny object detection and adding LRP (Localization Recall Precision) metric calculation, maintaining compatibility with [cocoapi-aitod](https://github.com/jwwangchn/cocoapi-aitod) while significantly improving computation speed.
+
+## Key Features
+
+- Optimized evaluation parameters for tiny object detection scenarios
+- Added LRP metric calculation consistent with aitodpycocotools
+- Significantly faster computation compared to original pycocotools
+- Maintains all original Faster-COCO-Eval functionality
+- Compatible with AITOD dataset evaluation requirements
 
 ## Install
 
 ### Basic implementation identical to pycocotools
 
 ```bash
-pip install faster-coco-eval
-```
-
-### Additional visualization options
-
-> Only 1 additional package needed opencv-python-headless
-
-```bash
-pip install faster-coco-eval[extra]
+pip install faster-coco-eval-aitod
 ```
 
 ### Conda install
 
 ```bash
-conda install conda-forge::faster-coco-eval
+conda install conda-forge::faster-coco-eval-aitod
 ```
 
 ### Basic usage
 
 ```py
-import faster_coco_eval
+import faster_coco_eval_aitod
 
-# Replace pycocotools with faster_coco_eval
-faster_coco_eval.init_as_pycocotools()
+# Replace aitodpycocotools with faster_coco_eval_aitod
+faster_coco_eval_aitod.init_as_aitodpycocotools()
 
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
+from faster_coco_eval_aitod import COCO, COCOeval_faster
 
-anno = COCO(str(anno_json))  # init annotations api
-pred = anno.loadRes(str(pred_json))  # init predictions api (must pass string, not Path)
+anno = COCO(str(anno_json))
+pred = anno.loadRes(str(pred_json))
 
-val = COCOeval(anno, pred, "bbox")
+val = COCOeval_faster(anno, pred, "bbox")
 val.evaluate()
 val.accumulate()
 val.summarize()
-
+# Access LRP metrics
+lrp_metrics = val.stats_lrp
 ```
 
-## Faster-COCO-Eval base
+## Performance Comparison
 
-This package wraps a facebook C++ implementation of COCO-eval operations found in the
-[pycocotools](https://github.com/cocodataset/cocoapi/tree/master/PythonAPI/pycocotools) package.
-This implementation greatly speeds up the evaluation time
-for coco's AP metrics, especially when dealing with a high number of instances in an image.
+For AITOD dataset evaluation, our implementation shows significant speed improvements while maintaining identical results with aitodpycocotools (tested using `/test` in this project):
 
-## Comparison
+| Image Counts | faster-coco-eval-aitod | aitodpycocotools | Speed Improvement |
+| ---: | ---: | ---: | ---: |
+| 5000 | 31.7s | 57.7s | **+45%** |
 
-For our use case with a test dataset of 5000 images from the coco val dataset.
-Testing was carried out using the mmdetection framework and the eval_metric.py script. The indicators are presented below.
-
-Visualization of testing **colab_example.ipynb** available in directory [examples/comparison](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/comparison)
-
-- [mmdet example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/comparison/mmdet/colab_example.ipynb)
-- [ultralytics example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/comparison/ultralytics/colab_example.ipynb)
-
-### Summary for 5000 imgs
-
-| Type | faster-coco-eval | pycocotools | Profit |
-| :--- | ---------------: | ----------: | -----: |
-| bbox |            5.812 |       22.72 |  3.909 |
-| segm |            7.413 |      24.434 |  3.296 |
 
 ## Feautures
 
 This library provides not only validation functions, but also error visualization functions. Including visualization of errors in the image.
-You can study in more detail in the [examples](https://github.com/MiXaiLL76/faster_coco_eval/blob/main/examples) and [Wiki](https://github.com/MiXaiLL76/faster_coco_eval/wiki).
+You can study in more detail in the [test](https://github.com/RicePasteM/faster_coco_eval_aitod/blob/main/test).
 
-## Usage
-
-Code examples for using the library are available on the [Wiki](https://github.com/MiXaiLL76/faster_coco_eval/wiki)
-
-### Examples
-
-- [Eval example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/eval_example.ipynb)
-- [Curve example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/curve_example.ipynb)
-- [CED Keypoint example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/ced_example.ipynb)
-- [LVIS example](https://nbviewer.org/github/MiXaiLL76/faster_coco_eval/blob/main/examples/lvis_example.ipynb)
 
 ## Update history
 
-Available via link [history.md](https://github.com/MiXaiLL76/faster_coco_eval/blob/main/history.md)
+Available via link [history.md](https://github.com/RicePasteM/faster_coco_eval_aitod/blob/main/history.md)
 
-## Star History
+<!-- ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=MiXaiLL76/faster_coco_eval&type=Date)](https://star-history.com/#MiXaiLL76/faster_coco_eval&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=MiXaiLL76/faster_coco_eval_aitod&type=Date)](https://star-history.com/#MiXaiLL76/faster_coco_eval_aitod&Date) -->
 
 ## License
 
-The original module was licensed with apache 2, I will continue with the same license.
+The original module was licensed with apache 2, so I will continue with the same license.
 Distributed under the apache version 2.0 license, see [license](LICENSE) for more information.
 
 ## Citation
 
-If you use this benchmark in your research, please cite this project.
+If you use this fork in your research, please cite both this project and original Faster-COCO-Eval:
 
 ```
+@article{faster-coco-eval-aitod,
+  title   = {{Faster-COCO-Eval-AITOD}: Faster interpretation of the original aitodpycocotools},
+  author  = {ZhangchiHu},
+  year    = {2025}
+}
+
 @article{faster-coco-eval,
   title   = {{Faster-COCO-Eval}: Faster interpretation of the original COCOEval},
   author  = {MiXaiLL76},

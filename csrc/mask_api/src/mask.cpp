@@ -1,4 +1,5 @@
 // Copyright (c) MiXaiLL76
+#define _PSTL_PAR_BACKEND_TBB 0
 #include "mask.h"
 #include <time.h>
 #include <algorithm>

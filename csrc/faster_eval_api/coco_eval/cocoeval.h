@@ -68,6 +68,7 @@ namespace coco_eval
       std::vector<bool> detection_ignores;
 
       std::vector<MatchedAnnotation> matched_annotations;
+      std::vector<std::vector<double>> detection_iou;       // Added: IoU value for each detection
     };
 
     template <class T>
@@ -150,7 +151,8 @@ namespace coco_eval
     // which was called with the same parameter settings params
     py::dict Accumulate(
         const py::object &params,
-        const std::vector<ImageEvaluation> &evalutations);
+        const std::vector<ImageEvaluation> &evaluations,
+        const bool with_lrp);
 
     py::dict EvaluateAccumulate(
         const py::object &params,
